@@ -11,9 +11,9 @@ import androidx.media3.transformer.Transformer
 
 class AudioExtractor(private val context: Context) {
     @OptIn(UnstableApi::class)
-    fun extract(inputUri: Uri, outputFilePath: String, listener: Transformer.Listener){
+    fun extract(inputUri: Uri, outputFilePath: String, mimeType: String, listener: Transformer.Listener){
         val transformer = Transformer.Builder(context)
-            .setAudioMimeType(MimeTypes.AUDIO_AAC)
+            .setAudioMimeType(mimeType)
             .addListener(listener)
             .build()
 

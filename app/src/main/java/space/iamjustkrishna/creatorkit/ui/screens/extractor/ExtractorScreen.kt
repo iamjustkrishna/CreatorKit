@@ -6,19 +6,23 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -51,8 +55,10 @@ fun ExtractorScreen(
         uri?.let { viewModel.onVideoSelected(it) }
     }
 
+    var selectedFormat by remember { mutableStateOf(AudioFormat.M4A) }
     if (state is ExtractionState.Selected) {
         var fileName by remember(state) { mutableStateOf(state.initialName) }
+
 
         AlertDialog(
             onDismissRequest = { viewModel.resetState() },
@@ -71,19 +77,41 @@ fun ExtractorScreen(
                         modifier = Modifier.fillMaxWidth()
                     )
 
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    // 2. Format Selection (Chips)
+                    Text("Format:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        AudioFormat.entries.forEach { format ->
+                            FilterChip(
+                                selected = selectedFormat == format,
+                                onClick = { selectedFormat = format },
+                                label = { Text(format.displayName) },
+                                leadingIcon = if (selectedFormat == format) {
+                                    { Icon(Icons.Default.Check, contentDescription = null, modifier = Modifier.size(16.dp)) }
+                                } else null
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    // Preview Output Name
                     Text(
-                        text = "Output: Music/$fileName.m4a",
+                        text = "Output: Music/${fileName}.${selectedFormat.extension}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+
                 }
             },
             confirmButton = {
                 Button(
                     onClick = {
                         if (fileName.isNotBlank()) {
-                            viewModel.checkAndStartExtraction(state.uri, fileName)
+                            viewModel.checkAndStartExtraction(state.uri, fileName, selectedFormat)
                         }
                     }
                 ) {
@@ -104,7 +132,7 @@ fun ExtractorScreen(
             title = { Text("File Already Exists") },
             text = { Text("The file '${state.fileName}' already exists. Do you want to overwrite it?") },
             confirmButton = {
-                TextButton(onClick = { viewModel.forceStartExtraction(state.uri, state.fileName) }) {
+                TextButton(onClick = { viewModel.forceStartExtraction(state.uri, state.fileName, selectedFormat) }) {
                     Text("Yes, Overwrite")
                 }
             },

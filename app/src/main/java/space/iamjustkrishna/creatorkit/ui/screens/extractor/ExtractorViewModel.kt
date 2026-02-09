@@ -25,7 +25,12 @@ sealed class ExtractionState {
     object Processing : ExtractionState()
     data class Success(val outputUri: Uri) : ExtractionState()
     data class Error(val message: String) : ExtractionState()
-    data class DuplicateFound(val uri: Uri, val fileName: String) : ExtractionState()
+    data class DuplicateFound(val uri: Uri, val fileName: String, val format: AudioFormat) : ExtractionState()
+}
+
+enum class AudioFormat(val extension: String, val mimeType: String, val displayName: String) {
+    M4A("m4a", androidx.media3.common.MimeTypes.AUDIO_AAC, "M4A (AAC)"),
+    MP3("mp3", androidx.media3.common.MimeTypes.AUDIO_MPEG, "MP3")
 }
 
 class ExtractorViewModel(application: Application) : AndroidViewModel(application) {
@@ -42,17 +47,14 @@ class ExtractorViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     // 2. Called when user clicks "Extract" in the Dialog.
-    fun checkAndStartExtraction(videoUri: Uri, customName: String) {
-        // Ensure extension is present for the check
-        val targetName = if (customName.endsWith(".m4a", ignoreCase = true)) customName else "$customName.m4a"
+    fun checkAndStartExtraction(videoUri: Uri, customName: String, format: AudioFormat) {
+        val safeName = "${customName}.${format.extension}" // e.g. "MySong.mp3"
 
-        // Check if this file exists in MediaStore (Public Music Folder)
-        if (fileExistsInMediaStore(targetName)) {
-            // Found it! Trigger the Popup
-            extractionState = ExtractionState.DuplicateFound(videoUri, targetName)
+        if (fileExistsInMediaStore(safeName)) {
+            // Pass the format to the duplicate state so we remember it
+            extractionState = ExtractionState.DuplicateFound(videoUri, safeName, format)
         } else {
-            // Not found, proceed normally
-            forceStartExtraction(videoUri, targetName)
+            forceStartExtraction(videoUri, safeName, format)
         }
     }
 
@@ -88,18 +90,19 @@ class ExtractorViewModel(application: Application) : AndroidViewModel(applicatio
     }
 
     @OptIn(UnstableApi::class)
-    fun forceStartExtraction(videoUri: Uri, finalFileName: String) {
+    fun forceStartExtraction(videoUri: Uri, finalFileName: String, format: AudioFormat) {
         extractionState = ExtractionState.Processing
 
         // 1. Prepare Output Path in Cache
         // Ensure filename doesn't have extension for the temp file creation logic if needed,
         // but here we just need a unique temp path.
         val safeFileName = finalFileName.substringBeforeLast(".")
-        val tempOutputPath = "${context.cacheDir}/$safeFileName.m4a"
+        val tempOutputPath = "${context.cacheDir}/$safeFileName${format.extension}"
+
         val tempFile = File(tempOutputPath)
 
         // 2. Start Extraction
-        extractor.extract(videoUri, tempOutputPath, object : Transformer.Listener {
+        extractor.extract(videoUri, tempFile.absolutePath, mimeType = format.mimeType, object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
                 // 3. Save to Public Music Folder with the user's chosen name
                 val savedUri = FileSaver.saveAudioToPublicMusic(
@@ -109,10 +112,10 @@ class ExtractorViewModel(application: Application) : AndroidViewModel(applicatio
                 )
 
                 // Update UI to show the Player
-                if (savedUri != null) {
-                    extractionState = ExtractionState.Success(savedUri)
+                extractionState = if (savedUri != null) {
+                    ExtractionState.Success(savedUri)
                 } else {
-                    extractionState = ExtractionState.Error("Failed to save file")
+                    ExtractionState.Error("Failed to save file")
                 }
 
                 // Cleanup temp file
