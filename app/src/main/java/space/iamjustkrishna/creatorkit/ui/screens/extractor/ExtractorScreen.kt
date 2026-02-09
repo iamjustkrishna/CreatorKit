@@ -21,38 +21,90 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import space.iamjustkrishna.creatorkit.R
 import space.iamjustkrishna.creatorkit.util.SimpleAudioPlayer
-
 @Composable
-fun ExtractorScreen(viewModel: ExtractorViewModel = viewModel(),
-                    onBackClick: () -> Unit) {
-    // 1. Observe the new State (Idle, Processing, Success, Error)
+fun ExtractorScreen(
+    viewModel: ExtractorViewModel = viewModel(),
+    onBackClick: () -> Unit
+) {
     val state = viewModel.extractionState
 
-    // 2. Setup the Media Picker
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
-        uri?.let { viewModel.checkAndStartExtraction(it) }
+        uri?.let { viewModel.onVideoSelected(it) }
+    }
+
+    if (state is ExtractionState.Selected) {
+        var fileName by remember(state) { mutableStateOf(state.initialName) }
+
+        AlertDialog(
+            onDismissRequest = { viewModel.resetState() },
+            icon = { Icon(painterResource(R.drawable.audiofile), contentDescription = null) },
+            title = { Text("Extract Audio") },
+            text = {
+                Column {
+                    Text("Enter a name for your audio file:")
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    OutlinedTextField(
+                        value = fileName,
+                        onValueChange = { fileName = it },
+                        label = { Text("File Name") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "Output: Music/$fileName.m4a",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (fileName.isNotBlank()) {
+                            viewModel.checkAndStartExtraction(state.uri, fileName)
+                        }
+                    }
+                ) {
+                    Text("Extract")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { viewModel.resetState() }) {
+                    Text("Cancel")
+                }
+            }
+        )
     }
 
     if (state is ExtractionState.DuplicateFound) {
         AlertDialog(
-            onDismissRequest = { viewModel.resetState() }, // Create a reset function
+            onDismissRequest = { viewModel.resetState() },
             title = { Text("File Already Exists") },
-            text = { Text("You have already extracted audio from this video. Do you want to do it again?") },
+            text = { Text("The file '${state.fileName}' already exists. Do you want to overwrite it?") },
             confirmButton = {
-                TextButton(onClick = { viewModel.forceStartExtraction(state.uri) }) {
+                TextButton(onClick = { viewModel.forceStartExtraction(state.uri, state.fileName) }) {
                     Text("Yes, Overwrite")
                 }
             },
@@ -72,7 +124,6 @@ fun ExtractorScreen(viewModel: ExtractorViewModel = viewModel(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // --- The Button ---
         Button(
             onClick = {
                 launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
@@ -82,7 +133,6 @@ fun ExtractorScreen(viewModel: ExtractorViewModel = viewModel(),
                 .fillMaxWidth()
                 .height(56.dp)
         ) {
-            // Using a default icon for safety, you can swap back to R.drawable.videofile
             Icon(imageVector = ImageVector.vectorResource(R.drawable.videofile), contentDescription = null)
             Spacer(modifier = Modifier.width(8.dp))
             Text(if (state is ExtractionState.Success) "Select Another Video" else "Select Video to Extract Audio")
@@ -90,9 +140,8 @@ fun ExtractorScreen(viewModel: ExtractorViewModel = viewModel(),
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- Dynamic State Content ---
         when (state) {
-            is ExtractionState.Idle -> {
+            is ExtractionState.Idle, is ExtractionState.Selected -> {
                 Text(
                     text = "Supports MP4, MKV, AVI, and more.",
                     style = MaterialTheme.typography.bodyMedium,
@@ -139,7 +188,6 @@ fun ExtractorScreen(viewModel: ExtractorViewModel = viewModel(),
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
-            // DuplicateFound is handled by the AlertDialog above,
             is ExtractionState.DuplicateFound -> {}
         }
     }

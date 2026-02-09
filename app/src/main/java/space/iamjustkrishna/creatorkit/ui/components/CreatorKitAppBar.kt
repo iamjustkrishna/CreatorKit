@@ -40,7 +40,7 @@ fun CreatorKitAppBar(
             .height(48.dp) // COMPACT HEIGHT (Adjust this to make it thinner/thicker)
             .clip(RoundedCornerShape(24.dp)) // ROUNDED CORNERS (The Pill Shape)
             .background(
-                MaterialTheme.colorScheme.surface.copy(alpha = 0.90f)
+                MaterialTheme.colorScheme.surface.copy(alpha = 0f)
             )
     ) {
         Row(

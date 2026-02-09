@@ -4,6 +4,7 @@ import android.app.Application
 import android.content.ContentUris
 import android.net.Uri
 import android.provider.MediaStore
+import android.provider.OpenableColumns
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
@@ -16,6 +17,7 @@ import kotlinx.coroutines.launch
 import space.iamjustkrishna.creatorkit.data.model.MediaFile
 import space.iamjustkrishna.creatorkit.processing.AudioEnhancer
 import java.io.File
+
 
 class VocalStudioViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -30,18 +32,24 @@ class VocalStudioViewModel(application: Application) : AndroidViewModel(applicat
     fun processAudio(uri: Uri) {
         uiState = VocalStudioState.Processing
 
+        // 1. Get the real name of the file
+        val originalName = getFileName(uri)
+        // 2. Create new name: "MySong" -> "MySong_CK_Enhance"
+        val outputFileName = "${originalName}_CK_Enhance"
+
         val tempFile = File(getApplication<Application>().cacheDir, "temp_studio.m4a")
 
         enhancer.enhanceAudio(
             inputUri = uri,
             outputFile = tempFile,
             onSuccess = { path ->
+                // 3. Save using the specific name
                 val savedUri = FileSaver.saveAudioToPublicMusic(
                     getApplication(),
                     File(path),
-                    "CreatorKit_Studio_${System.currentTimeMillis()}"
+                    outputFileName
                 )
-                // FIX: Pass both the input URI and the new Result URI
+                // Pass both the input URI and the new Result URI
                 uiState = VocalStudioState.Success(originalUri = uri, outputUri = savedUri ?: Uri.EMPTY)
             },
             onError = { error ->
@@ -50,8 +58,30 @@ class VocalStudioViewModel(application: Application) : AndroidViewModel(applicat
         )
     }
 
-    fun reset(){
+    fun reset() {
         uiState = VocalStudioState.Idle
+    }
+
+    // Helper to get the actual filename from URI
+    private fun getFileName(uri: Uri): String {
+        var result = "Audio"
+        val context = getApplication<Application>()
+
+        try {
+            context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                if (cursor.moveToFirst()) {
+                    val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                    if (nameIndex != -1) {
+                        result = cursor.getString(nameIndex)
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        // Remove extension if present (e.g. "song.mp3" -> "song")
+        return result.substringBeforeLast(".")
     }
 
     fun loadAudioLibrary() {
@@ -68,15 +98,13 @@ class VocalStudioViewModel(application: Application) : AndroidViewModel(applicat
                 MediaStore.Audio.Media.DURATION
             )
 
-            // Query: Fetch ALL audio (Music + Recordings)
-            // We removed the strict "IS_MUSIC" check because some voice recorders don't set it.
             val sortOrder = "${MediaStore.Audio.Media.DATE_ADDED} DESC"
 
             try {
                 context.contentResolver.query(
                     MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
                     projection,
-                    null, // No strict selection (fetch everything)
+                    null,
                     null,
                     sortOrder
                 )?.use { cursor ->
@@ -93,7 +121,7 @@ class VocalStudioViewModel(application: Application) : AndroidViewModel(applicat
                         val name = cursor.getString(nameCol) ?: "Unknown Audio"
                         val duration = cursor.getLong(durCol)
 
-                        // Filter out very short audio (e.g., notification sounds < 1 sec)
+                        // Filter out very short audio
                         if (duration > 1000) {
                             files.add(
                                 MediaFile(
@@ -117,7 +145,6 @@ class VocalStudioViewModel(application: Application) : AndroidViewModel(applicat
         }
     }
 }
-
 sealed class VocalStudioState {
     object Idle : VocalStudioState()
     object Processing : VocalStudioState()

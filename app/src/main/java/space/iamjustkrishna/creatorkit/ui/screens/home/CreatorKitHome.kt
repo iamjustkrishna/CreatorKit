@@ -89,6 +89,15 @@ fun CreatorKitHome(
 
         // --- Section 3: The List with Swipe-to-Delete ---
         // We use 'key' so Compose knows exactly which item is being swiped
+
+        if(processedFiles.isEmpty()){
+            item{
+                Box(modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center){
+                    Text("No Recent Files Found.")
+                }}
+
+        }
         items(processedFiles, key = { it.id }) { file ->
 
             // 1. Setup Swipe State

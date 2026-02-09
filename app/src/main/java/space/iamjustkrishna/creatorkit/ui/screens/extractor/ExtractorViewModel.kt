@@ -21,23 +21,30 @@ import java.io.File
 
 sealed class ExtractionState {
     object Idle : ExtractionState()
+    data class Selected(val uri: Uri, val initialName: String) : ExtractionState() // New state for Rename Dialog
     object Processing : ExtractionState()
-    data class Success(val outputUri: Uri) : ExtractionState() // Holds the URI for the player
+    data class Success(val outputUri: Uri) : ExtractionState()
     data class Error(val message: String) : ExtractionState()
     data class DuplicateFound(val uri: Uri, val fileName: String) : ExtractionState()
 }
 
-class ExtractorViewModel(application: Application): AndroidViewModel(application) {
+class ExtractorViewModel(application: Application) : AndroidViewModel(application) {
     private val extractor = AudioExtractor(application)
-
     private val context = application.applicationContext
 
     var extractionState by mutableStateOf<ExtractionState>(ExtractionState.Idle)
         private set
 
-    fun checkAndStartExtraction(videoUri: Uri) {
+    // 1. Called when user clicks a video item. Sets state to Selected to trigger Dialog.
+    fun onVideoSelected(videoUri: Uri) {
         val originalName = getFileName(videoUri)
-        val targetName = "${originalName}_CreatorKit.m4a"
+        extractionState = ExtractionState.Selected(videoUri, originalName)
+    }
+
+    // 2. Called when user clicks "Extract" in the Dialog.
+    fun checkAndStartExtraction(videoUri: Uri, customName: String) {
+        // Ensure extension is present for the check
+        val targetName = if (customName.endsWith(".m4a", ignoreCase = true)) customName else "$customName.m4a"
 
         // Check if this file exists in MediaStore (Public Music Folder)
         if (fileExistsInMediaStore(targetName)) {
@@ -45,7 +52,7 @@ class ExtractorViewModel(application: Application): AndroidViewModel(application
             extractionState = ExtractionState.DuplicateFound(videoUri, targetName)
         } else {
             // Not found, proceed normally
-            forceStartExtraction(videoUri)
+            forceStartExtraction(videoUri, targetName)
         }
     }
 
@@ -81,35 +88,24 @@ class ExtractorViewModel(application: Application): AndroidViewModel(application
     }
 
     @OptIn(UnstableApi::class)
-    fun forceStartExtraction(videoUri: Uri) {
+    fun forceStartExtraction(videoUri: Uri, finalFileName: String) {
         extractionState = ExtractionState.Processing
 
-        // 1. Get the Original Filename
-        val context = getApplication<Application>()
-        var originalName = "Audio_CreatorKit"
+        // 1. Prepare Output Path in Cache
+        // Ensure filename doesn't have extension for the temp file creation logic if needed,
+        // but here we just need a unique temp path.
+        val safeFileName = finalFileName.substringBeforeLast(".")
+        val tempOutputPath = "${context.cacheDir}/$safeFileName.m4a"
+        val tempFile = File(tempOutputPath)
 
-        context.contentResolver.query(videoUri, null, null, null, null)?.use { cursor ->
-            val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-            if (cursor.moveToFirst() && nameIndex != -1) {
-                val fullName = cursor.getString(nameIndex)
-                // Remove the extension (e.g. remove ".mp4")
-                originalName = fullName.substringBeforeLast(".")
-            }
-        }
-
-        // 2. Prepare the Output
-        val newFileName = "${originalName}_CreatorKit" // e.g. "MyVlog_CreatorKit"
-        val outputPath = "${context.cacheDir}/$newFileName.m4a"
-        val tempFile = File(outputPath)
-
-        // 3. Start Extraction
-        extractor.extract(videoUri, outputPath, object : Transformer.Listener {
+        // 2. Start Extraction
+        extractor.extract(videoUri, tempOutputPath, object : Transformer.Listener {
             override fun onCompleted(composition: Composition, exportResult: ExportResult) {
-                // Save to Public Music Folder
+                // 3. Save to Public Music Folder with the user's chosen name
                 val savedUri = FileSaver.saveAudioToPublicMusic(
                     context = context,
                     tempFile = tempFile,
-                    fileName = newFileName // Uses the correct name now
+                    fileName = safeFileName // FileSaver likely handles adding extension or expects name without it
                 )
 
                 // Update UI to show the Player
@@ -133,7 +129,7 @@ class ExtractorViewModel(application: Application): AndroidViewModel(application
         })
     }
 
-    fun resetState(){
+    fun resetState() {
         extractionState = ExtractionState.Idle
     }
 }
