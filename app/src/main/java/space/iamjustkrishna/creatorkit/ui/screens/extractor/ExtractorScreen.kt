@@ -14,6 +14,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Warning
@@ -36,29 +38,61 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.vectorResource
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import space.iamjustkrishna.creatorkit.R
 import space.iamjustkrishna.creatorkit.util.SimpleAudioPlayer
+
 @Composable
 fun ExtractorScreen(
     viewModel: ExtractorViewModel = viewModel(),
     onBackClick: () -> Unit
 ) {
     val state = viewModel.extractionState
+    val context = LocalContext.current
 
-    val launcher = rememberLauncherForActivityResult(
+    // --- 1. The "Modern" Launcher (Photo Picker) ---
+    // Best for Android 13+ and devices with Play Services
+    val modernLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
         uri?.let { viewModel.onVideoSelected(it) }
     }
 
-    var selectedFormat by remember { mutableStateOf(AudioFormat.M4A) }
-    if (state is ExtractionState.Selected) {
-        var fileName by remember(state) { mutableStateOf(state.initialName) }
+    // --- 2. The "Classic" Launcher (System File Picker) ---
+    // Works on EVERYTHING (Android 5.0+, Emulators, etc.)
+    val legacyLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.GetContent()
+    ) { uri ->
+        uri?.let { viewModel.onVideoSelected(it) }
+    }
 
+    // --- 3. The Robust Launch Logic ---
+    fun launchVideoPicker() {
+        try {
+            // First, try the modern, permission-less picker
+            modernLauncher.launch(
+                PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)
+            )
+        } catch (e: Exception) {
+            // If it crashes (e.g. "ActivityNotFound" on Emulator),
+            // silently fall back to the classic picker.
+            legacyLauncher.launch("video/*")
+        }
+    }
+
+    // --- 4. State & UI ---
+
+    // Hold the format selection state here so it persists across dialog recompositions
+    var selectedFormat by remember { mutableStateOf(AudioFormat.M4A) }
+
+    // RENAME DIALOG (Triggered when a video is selected)
+    if (state is ExtractionState.Selected) {
+        // Initialize with the original file name
+        var fileName by remember(state) { mutableStateOf(state.initialName) }
 
         AlertDialog(
             onDismissRequest = { viewModel.resetState() },
@@ -79,7 +113,7 @@ fun ExtractorScreen(
 
                     Spacer(modifier = Modifier.height(16.dp))
 
-                    // 2. Format Selection (Chips)
+                    // Format Chips
                     Text("Format:", style = MaterialTheme.typography.labelMedium)
                     Spacer(modifier = Modifier.height(8.dp))
 
@@ -98,13 +132,11 @@ fun ExtractorScreen(
 
                     Spacer(modifier = Modifier.height(12.dp))
 
-                    // Preview Output Name
                     Text(
                         text = "Output: Music/${fileName}.${selectedFormat.extension}",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
-
                 }
             },
             confirmButton = {
@@ -126,13 +158,20 @@ fun ExtractorScreen(
         )
     }
 
+    // DUPLICATE WARNING DIALOG
     if (state is ExtractionState.DuplicateFound) {
+        // Note: We need to remember the format from the previous step or pass it in the state.
+        // Assuming your DuplicateFound state now holds the format (as we discussed before).
+        // If not, it uses the current 'selectedFormat' variable.
         AlertDialog(
             onDismissRequest = { viewModel.resetState() },
             title = { Text("File Already Exists") },
             text = { Text("The file '${state.fileName}' already exists. Do you want to overwrite it?") },
             confirmButton = {
-                TextButton(onClick = { viewModel.forceStartExtraction(state.uri, state.fileName, selectedFormat) }) {
+                TextButton(onClick = {
+                    // Pass the format cleanly to the force function
+                    viewModel.forceStartExtraction(state.uri, state.fileName, selectedFormat)
+                }) {
                     Text("Yes, Overwrite")
                 }
             },
@@ -145,17 +184,20 @@ fun ExtractorScreen(
         )
     }
 
+    // MAIN UI CONTENT
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .padding(16.dp),
+            .padding(16.dp)
+            .verticalScroll(rememberScrollState()), // Add scrolling for small screens
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
+        // Spacer to push content down if you have a Glassy Top Bar
+        Spacer(modifier = Modifier.height(60.dp))
+
         Button(
-            onClick = {
-                launcher.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
-            },
+            onClick = { launchVideoPicker() }, // <--- Calls our robust helper
             enabled = state !is ExtractionState.Processing,
             modifier = Modifier
                 .fillMaxWidth()

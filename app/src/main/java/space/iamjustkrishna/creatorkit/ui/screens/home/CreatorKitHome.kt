@@ -23,6 +23,7 @@ import space.iamjustkrishna.creatorkit.R
 import space.iamjustkrishna.creatorkit.data.model.MediaFile
 import space.iamjustkrishna.creatorkit.ui.components.HistoryItem
 import space.iamjustkrishna.creatorkit.ui.components.ToolCard
+import space.iamjustkrishna.creatorkit.ui.screens.editor.SharedEditorViewModel
 import space.iamjustkrishna.creatorkit.util.SimpleAudioPlayer
 
 // 1. Define the Tool Data Class (if you haven't already)
@@ -34,13 +35,15 @@ data class Tool(
 
 enum class ToolType {
     AudioExtractor,
-    VocalStudio
+    VocalStudio,
+    VideoEditor
 }
 
 // 2. Define your static list of tools
 val tools = listOf(
     Tool("Audio Extractor", R.drawable.audioextractor, ToolType.AudioExtractor),
-    Tool("Vocal Studio", R.drawable.vocalstudio, ToolType.VocalStudio)
+    Tool("Vocal Studio", R.drawable.vocalstudio, ToolType.VocalStudio),
+    Tool("Video Editor", R.drawable.videoeditor, ToolType.VideoEditor)
 )
 
 @OptIn(ExperimentalMaterial3Api::class)

@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -12,11 +15,25 @@ android {
         applicationId = "space.iamjustkrishna.creatorkit"
         minSdk = 29
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 8
+        versionName = "1.2.8"
+
+        val properties = Properties()
+
+        val localPropertiesFile = project.rootProject.file("local.properties")
+        if(localPropertiesFile.exists()){
+            properties.load(FileInputStream(localPropertiesFile))
+        }
+
+        val groqKey = properties.getProperty("GROQ_API_KEY") ?: ""
+        buildConfigField("String", "GROQ_API_KEY",  "\"$groqKey\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+
+
     }
+    
 
     buildTypes {
         release {
@@ -36,7 +53,10 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
+
+
 }
 
 dependencies {
@@ -63,13 +83,9 @@ dependencies {
     val media3Version = "1.9.2"
     implementation("androidx.media3:media3-transformer:$media3Version")
     implementation("androidx.media3:media3-common:$media3Version")
-    implementation("androidx.media3:media3-exoplayer:1.5.0")
+    implementation("androidx.media3:media3-exoplayer:1.9.2")
 
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.10.0")
-
-    // For the AI Cleaning
-    implementation("org.tensorflow:tensorflow-lite:2.15.0")
-    implementation("org.tensorflow:tensorflow-lite-gpu:2.15.0")
 
     // 1. Local Unit Tests (Logic)
     testImplementation("junit:junit:4.13.2")
@@ -82,7 +98,12 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.7.0")
 
     // 3. Compose UI Tests
-    androidTestImplementation(platform("androidx.compose:compose-bom:2026.01.01"))
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+
+    implementation("androidx.media3:media3-ui:1.9.2")
+
+    implementation("androidx.media3:media3-effect:1.9.2") // Use your current Media3 version
 }
